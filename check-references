@@ -1,0 +1,253 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use encoding 'utf-8';
+
+use Parse;
+use Data::Dumper;
+
+# my $good = "\e[32;1m+\e[0m\e[2K\e[1G";
+my $good = "\e[32;1m+\e[0m\e[2K\e[1G";
+# my $unknown = "\e[33;1m?\e[0m\n";
+my $unknown = "\e[33;1m?\e[0m\n";
+my $bad = "\e[31;1m-\e[0m\e[2K\e[1G";
+# my $bad = "\e[31;1m-\e[0m\n";
+
+my $someLaw = qr(Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|(?:[A-Za-zäöüÄÖÜ]+ Buches |[A-Za-zäöüÄÖÜ]+\s+|[A-Za-zäöüÄÖÜ]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9]*|[A-Za-zäöüÄÖÜ]+ Buche?s?);
+
+# die "Bürgerlichen Gesetzbuchs" =~ m/^$someLaw$/;
+
+for my $lawFile (glob 'data/*.html') {
+  Parse::parseHTML($lawFile);
+}
+
+my $oldExternalLaw = undef;
+my %buchNumeric = initBuchNumeric();
+
+foreach my $law (values %{Parse::all()}) {
+  foreach my $paragraph (@{$law->{'paragraph'}}) {
+    $oldExternalLaw = undef;
+
+    foreach my $absatz (@{$paragraph->{'absatz'}}) {
+      checkReferences($law, $paragraph, $absatz, $absatz->{'text'});
+    }
+  }
+}
+
+sub checkReferences {
+  my ($law, $paragraph, $absatz, $text) = @_;
+
+  $text =~ s/Abs\./Absatz/g;
+  $text =~ s/Nr\./Nummer/g;
+
+  if($text =~ /zukünftig in Kraft/) {
+    # nobody expects this to be consistent
+    return;
+  }
+
+  # print "$text\n";
+
+  my $externalLaw = undef;
+
+  my $any = 1;
+  while($any) {
+    $any = 0;
+
+    if($text =~ /($someLaw)[ :.;,](.*)/) {
+      $externalLaw = $1;
+      $text = $2;
+      $any = 1;
+      next;
+    }
+
+    if($text =~ /§ (\d+[a-z]*\.?)(?: ff\.)?(.*)/s) {
+      my $refParagraph = $1;
+      $text = $2;
+
+      $refParagraph =~ s/\.$//;
+      $refParagraph =~ s/ff$//;
+
+      my $refAbsatz = undef;
+
+      if($text =~ /^\s*Absatz(\s*\d+[a-z]*|\s*,|\s*und)*(.*)/s) {
+        my $absatz = $1;
+        $text = $2;
+
+        while($absatz =~ /(\d+[a-z]*)(.*)/) {
+          push @$refAbsatz, $1;
+          $absatz = $2;
+        }
+      }
+
+      foreach my $a (defined $refAbsatz? @$refAbsatz: (undef)) {
+        if($text =~ /^\s*(?:gilt auch für|findet.*Anwendung)/) {
+          # this cannot be rescued by later external mentions
+        } elsif($text =~ /^(?:\s*Satz (\d+))?(?:[^.\(]{0,200}?|[^.\(]*?\([^\(]*?\)[^.\(]*?)(?:\s+der|\s+des)?\s+($someLaw)/) {
+          $externalLaw = $2;
+          if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
+            $any = 1;
+            next;
+          }
+        } elsif($externalLaw) {
+          if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
+            $any = 1;
+            next;
+          }
+        }
+
+        $any = 1;
+
+        unless(checkAbsoluteReference($law, $paragraph, $absatz, $law->{'name'}, $refParagraph, $a)) {
+          my $oldBad = $bad;
+          $bad = "\e[31;1m!!!\e[0m\n";
+          checkAbsoluteReference($law, $paragraph, $absatz, $law->{'name'}, $refParagraph, $a);
+          $bad = $oldBad;
+          if($text =~ /Fassung/) {
+            # this might be a weird temporary regulation
+            print "\e[33;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (old)\e[0m\n";
+          } elsif(defined $oldExternalLaw and checkAbsoluteReference($law, $paragraph, $absatz, $oldExternalLaw, $refParagraph, $a)) {
+            # Orr...
+            print "\e[33;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (dislocated reference)\e[0m\n";
+          } else {
+            print "\e[31;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\e[0m\n";
+          }
+        }
+      }
+    }
+#  while($text =~ /(Absatz \d+[a-z]*) (.*)$/s) {
+#    $text = $2;
+#
+#    print "Reference: $1\n";
+  }
+
+  $oldExternalLaw = $externalLaw;
+}
+
+sub location {
+  my ($law, $paragraph, $absatz) = @_;
+
+  my $location = $law->{'veryshorthand'};
+  if(defined $paragraph and exists $paragraph->{'number'}) {
+    $location .= " § " . $paragraph->{'number'};
+  }
+  if(defined $absatz and exists $absatz->{'number'}) {
+    $location .= " Abs. " . $absatz->{'number'};
+  }
+
+  return $location;
+}
+
+sub checkAbsoluteReference {
+  my ($sourceLaw, $sourceParagraph, $sourceAbsatz, $lawName, $paragraph, $absatz) = @_;
+
+  my $source = location($sourceLaw, $sourceParagraph, $sourceAbsatz);
+
+  my @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
+
+  if($lawName eq 'Grundgesetz' and $paragraph !~ /Artikel/) {
+    return 0;
+  }
+
+  if(not @law) {
+    $lawName =~ s/^(des|der|die|das|dem|einer?m?|diese?s?m?|durch|kraft|von) //is;
+
+    $lawName =~ s/lichen /liches /;
+    $lawName =~ s/gesetzes$/gesetz/;
+    $lawName =~ s/buches$/buch/;
+    $lawName =~ s/buchs$/buch/;
+    $lawName =~ s/buche$/buch/;
+    $lawName =~ s/n Buches /s Buch /;
+    $lawName =~ s/n Buches$/s Buch/;
+    $lawName =~ s/Buches /Buch /;
+    $lawName =~ s/Buchs$/Buch/;
+    $lawName =~ s/Buche$/Buch/;
+
+    @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
+  }
+  if(not @law and $lawName =~ /Buch$/ and $sourceLaw->{'veryshorthand'} =~ /^SGB/) {
+    if(exists $buchNumeric{$lawName}) {
+      $lawName = "SGB " . $buchNumeric{$lawName};
+      @law = grep { $_->{'veryshorthand'} eq $lawName } values %{Parse::all()};
+    }
+    # die "$lawName not resolved" unless @law;
+  }
+  if(not @law and $lawName =~ /^([A-Za-zäöüÄÖÜ]+ Buch) Sozialgesetzbuch$/) {
+    my $book = $1;
+    if(exists $buchNumeric{$book}) {
+      $lawName = "SGB " . $buchNumeric{$book};
+      @law = grep { $_->{'veryshorthand'} eq $lawName } values %{Parse::all()};
+    }
+    # die "$lawName not resolved" unless @law;
+  }
+  if(not @law) {
+    $lawName =~ s/ss/ß/g;
+    @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
+  }
+  if(not @law) {
+    $lawName =~ s/ß/ss/g;
+    @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
+  }
+  if(not @law) {
+    @law = grep { $_->{'shorthand'} =~ /$lawName/ } values %{Parse::all()};
+  }
+  if(not @law) {
+    @law = grep { $_->{'veryshorthand'} =~ /$lawName/ } values %{Parse::all()};
+  }
+  if($lawName =~ /^[a-zäöü]/) {
+    return 0;
+  }
+  if($lawName =~ /^(Gesetze?s?n?|Rechtsverordnunge?n?|Beiordnung|Verordnung|Landesgesetze?|Landesbesoldungsgesetze?|Buch|In Rechtsverordnungen|Soweit Rechtsverordnunge?n?)$/) {
+    return 0;
+  }
+  if($lawName =~ / Ordnung$|^Ordnung$/) {
+    return 0;
+  }
+  if($lawName =~ /^(Arrestanordnung|Errichtungsanordnung|Strafgesetz|Dateianordnung|Einführungsgesetz|Rechtsordnung|Einordnung|Verordnungen|Sportordnung|Ordnungsgeld|Gesetzbuch|Erst- und Verlängerungsanordnunge?n?|.*ordnungswidrigkeite?n?|Übertragungsanordnung|Ordnungsgeldes|Tagesordnung|Rangordnung|Geschäftsordnunge?n?|Ordnungsgeldvorschrift|Dienstordnungsverhältnis|Zuordnung|Landesgesetzgebung|Bundesgesetz|Hausordnung|Ruhensanordnung|Börsenordnung|Übermittlungsverordnung|Ordnungsgeldverfahren|Gebührenordnung|Kostenordnung|Umschulungsordnung|Ausbildungsordnung|Prüfungsordnunge?n?|Fortbildungsordnung)$/) {
+    return 0;
+  }
+  if($lawName =~ /entgegengesetzt|eingesetzt|festgesetzt|Anordnung|fortgesetzt|Ordnungswidrig|ausgesetzt|vorgesetzt/) {
+    return 0;
+  }
+
+  if(not @law) {
+    print "reference $lawName § $paragraph @ $source ";
+    # print ((join "\n", map { $_->{'name'} } values %{Parse::all()}) . "\n");
+    print "$unknown";
+    return 1;
+  }
+
+  my $law = $law[0];
+
+  if($absatz) {
+    print "reference " . $law->{'veryshorthand'} . " § $paragraph Abs. $absatz @ $source ";
+  } else {
+    print "reference " . $law->{'veryshorthand'} . " § $paragraph @ $source ";
+  }
+
+  if(grep { $_->{'number'} eq $paragraph } @{$law->{'paragraph'}}) {
+    print "$good";
+  } else {
+    print "$bad";
+    return 0;
+  }
+
+  return 1;
+}
+
+sub initBuchNumeric {
+  return (
+    'Erstes Buch' => 1,
+    'Zweites Buch' => 2,
+    'Drittes Buch' => 3,
+    'Viertes Buch' => 4,
+    'Fünftes Buch' => 5,
+    'Sechstes Buch' => 6,
+    'Siebtes Buch' => 7,
+    'Achtes Buch' => 8,
+    'Neuntes Buch' => 9,
+    'Zehntes Buch' => 'X',
+    'Elftes Buch' => 11,
+    'Zwölftes Buch' => 12,
+  );
+}
