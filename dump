@@ -7,6 +7,6 @@ use encoding 'utf-8';
 use Parse;
 use Data::Dumper;
 
-Parse::parseHTML('data/BJNR001270871.html');
+Parse::parseHTML('data/laws/BJNR001270871.html');
 
 print Dumper(Parse::all());

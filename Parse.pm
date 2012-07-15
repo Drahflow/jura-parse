@@ -92,30 +92,22 @@ sub parseHTML {
         };
         push @paragraphs, $paragraph;
 
-        my @absatz = $block->descendants('div[@class="jurAbsatz"]');
-        foreach my $absatz (@absatz) {
-          my $text = $absatz->inner_xml();
-          $text =~ s/<[^>]*>/ /g;
-
-          if($absatz->parent('div[@class="jnfussnote"]')) {
-            next;
-          }
-
-          if($text =~ /^\((\d+)\S*\) (.*)$/s) {
-            $absatz = {
-              'number' => $1,
-              'text' => $2,
-            };
-          } else {
-            $absatz = {
-              'text' => $text,
-            };
-          }
-
-          push @{$paragraph->{'absatz'}}, $absatz;
-        }
+        parseAbsatz($block, $paragraph);
 
         print "Parsed § " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /^Art\.? (\d+\S*)\s*(.*)$/s) {
+        my $paragraph = {
+          'number' => "Artikel $1",
+          'title' => $2,
+          'absatz' => [],
+        };
+        push @paragraphs, $paragraph;
+
+        parseAbsatz($block, $paragraph);
+
+        print "Parsed Art. " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /\(Änderungs- und Aufhebungsvorschriften\)/) {
+        # skip
       } elsif($h3->text() =~ /\(weggefallen\)/) {
         # skip
       } elsif($h3->text() =~ /\(zukünftig in Kraft\)/) {
@@ -124,7 +116,9 @@ sub parseHTML {
         # skip
       } elsif($h3->text() =~ /\(gegenstandslos\)/) {
         # skip
-      } elsif($h3->text() =~ /Schlußformel/) {
+      } elsif($h3->text() =~ /\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\./) {
+        # skip
+      } elsif($h3->text() =~ /Schlu(ß|ss)formel/) {
         # skip
       } else {
         $block->print();
@@ -153,4 +147,33 @@ sub all {
   return \%all;
 }
 
+sub parseAbsatz {
+  my ($block, $paragraph) = @_;
+
+  my @absatz = $block->descendants('div[@class="jurAbsatz"]');
+  foreach my $absatz (@absatz) {
+    my $text = $absatz->inner_xml();
+    $text =~ s/<[^>]*>/ /g;
+
+    if($absatz->parent('div[@class="jnfussnote"]')) {
+      next;
+    }
+
+    if($text =~ /^\((\d+)\S*\) (.*)$/s) {
+      $absatz = {
+        'number' => $1,
+        'text' => $2,
+      };
+    } else {
+      $absatz = {
+        'text' => $text,
+      };
+    }
+
+    push @{$paragraph->{'absatz'}}, $absatz;
+  }
+}
+
 1;
+
+#TODO kill text where "weggefallen" etc. is the only content

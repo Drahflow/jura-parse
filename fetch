@@ -1,0 +1,59 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use XML::Twig;
+
+foreach my $letter ('A' .. 'Z', '0' .. '9') {
+  my $list = "data/list/$letter.html";
+
+  unless(-r $list) {
+    print "Fetching $list...";
+    system("wget -q 'http://www.gesetze-im-internet.de/Teilliste_$letter.html' -O '$list'");
+    print "\n";
+  }
+
+  print "Parsing $list\n";
+
+  next if(-z $list);
+
+  my $xml = XML::Twig->new();
+  open HTML, '<:encoding(iso-8859-1)', $list or die "cannot open $list: $!";
+  $xml->parse(join '', <HTML>);
+  close HTML;
+
+  foreach my $entry ($xml->root->descendants('p')) {
+    my $a = $entry->first_child('a');
+    my $url = $a->{'att'}->{'href'};
+
+    $url =~ m!\./([^/]+)/index.html! or die "cannot parse url: $url";
+    my $techshorthand = $1;
+
+    my $target = "data/index/$techshorthand.html";
+
+    unless(-r $target) {
+      print "Fetching $target...";
+      system("wget -q 'http://www.gesetze-im-internet.de/$techshorthand/index.html' -O '$target'");
+      print "\n";
+    }
+
+    my $xml = XML::Twig->new();
+    open HTML, '<:encoding(iso-8859-1)', $target or die "cannot open $target: $!";
+    $xml->parse(join '', <HTML>);
+    close HTML;
+
+    my ($h2) = $xml->root->descendants('h2');
+    ($a) = $h2->first_child('a');
+
+    my $file = $a->{'att'}->{'href'};
+    my $law = "data/laws/$file";
+
+    unless(-r $law) {
+      print "Fetching $law ($techshorthand)...";
+      system("wget -q 'http://www.gesetze-im-internet.de/$techshorthand/$file' -O 'data/laws/$file'");
+      print "\n";
+    }
+  }
+}

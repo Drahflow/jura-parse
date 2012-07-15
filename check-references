@@ -7,25 +7,28 @@ use encoding 'utf-8';
 use Parse;
 use Data::Dumper;
 
-# my $good = "\e[32;1m+\e[0m\e[2K\e[1G";
 my $good = "\e[32;1m+\e[0m\e[2K\e[1G";
+# my $good = "\e[32;1m+\e[0m\n";
 # my $unknown = "\e[33;1m?\e[0m\n";
 my $unknown = "\e[33;1m?\e[0m\n";
 my $bad = "\e[31;1m-\e[0m\e[2K\e[1G";
 # my $bad = "\e[31;1m-\e[0m\n";
+my $report = 0;
 
-my $someLaw = qr(Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|(?:[A-Za-zäöüÄÖÜ]+ Buches |[A-Za-zäöüÄÖÜ]+\s+|[A-Za-zäöüÄÖÜ]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9]*|[A-Za-zäöüÄÖÜ]+ Buche?s?);
+my $someLaw = qr(Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?);
 
-# die "Bürgerlichen Gesetzbuchs" =~ m/^$someLaw$/;
+# die "Telekommunikations-Überwachungsverordnung" =~ m/^$someLaw$/;
 
-for my $lawFile (glob 'data/*.html') {
+for my $lawFile (glob 'data/laws/*.html') {
   Parse::parseHTML($lawFile);
 }
 
 my $oldExternalLaw = undef;
 my %buchNumeric = initBuchNumeric();
+my %deletedLaws = initDeletedLaws();
+my %lawNameExpansion = initLawNameExpansion();
 
-foreach my $law (values %{Parse::all()}) {
+foreach my $law (sort { $a->{'veryshorthand'} cmp $b->{'veryshorthand'} } values %{Parse::all()}) {
   foreach my $paragraph (@{$law->{'paragraph'}}) {
     $oldExternalLaw = undef;
 
@@ -98,19 +101,23 @@ sub checkReferences {
 
         $any = 1;
 
-        unless(checkAbsoluteReference($law, $paragraph, $absatz, $law->{'name'}, $refParagraph, $a)) {
+        unless(checkAbsoluteReference($law, $paragraph, $absatz, $law->{'veryshorthand'}, $refParagraph, $a)) {
           my $oldBad = $bad;
           $bad = "\e[31;1m!!!\e[0m\n";
-          checkAbsoluteReference($law, $paragraph, $absatz, $law->{'name'}, $refParagraph, $a);
+          checkAbsoluteReference($law, $paragraph, $absatz, $law->{'veryshorthand'}, $refParagraph, $a);
           $bad = $oldBad;
           if($text =~ /Fassung/) {
             # this might be a weird temporary regulation
-            print "\e[33;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (old)\e[0m\n";
+            print "\e[33;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (old)\e[0m\n" if $report;
           } elsif(defined $oldExternalLaw and checkAbsoluteReference($law, $paragraph, $absatz, $oldExternalLaw, $refParagraph, $a)) {
             # Orr...
-            print "\e[33;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (dislocated reference)\e[0m\n";
+            print "\e[33;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (dislocated reference)\e[0m\n" if $report;
           } else {
-            print "\e[31;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\e[0m\n";
+            print "Name: " . $law->{'name'} . "\n" if $report;
+            print "VSH: " . $law->{'veryshorthand'} . "\n" if $report;
+            print "Context: " . $externalLaw . "\n" if defined $externalLaw and $report;
+            print "Context: " . $oldExternalLaw . "\n" if defined $oldExternalLaw and $report;
+            print "\e[31;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\e[0m\n" if $report;
           }
         }
       }
@@ -144,24 +151,29 @@ sub checkAbsoluteReference {
   my $source = location($sourceLaw, $sourceParagraph, $sourceAbsatz);
 
   my @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
-
-  if($lawName eq 'Grundgesetz' and $paragraph !~ /Artikel/) {
-    return 0;
+  if(not @law) {
+    @law = grep { $_->{'veryshorthand'} eq $lawName } values %{Parse::all()};
   }
 
   if(not @law) {
     $lawName =~ s/^(des|der|die|das|dem|einer?m?|diese?s?m?|durch|kraft|von) //is;
 
     $lawName =~ s/lichen /liches /;
-    $lawName =~ s/gesetzes$/gesetz/;
+    $lawName =~ s/Gesetzes/Gesetz/;
+    $lawName =~ s/gesetzes/gesetz/;
     $lawName =~ s/buches$/buch/;
     $lawName =~ s/buchs$/buch/;
     $lawName =~ s/buche$/buch/;
     $lawName =~ s/n Buches /s Buch /;
     $lawName =~ s/n Buches$/s Buch/;
+    $lawName =~ s/n Buch /s Buch /;
+    $lawName =~ s/n Buch$/s Buch/;
     $lawName =~ s/Buches /Buch /;
     $lawName =~ s/Buchs$/Buch/;
     $lawName =~ s/Buche$/Buch/;
+    $lawName =~ s/zwanzigsten /zwanzigstes /;
+    $lawName =~ s/läufigen /läufiges /;
+    $lawName =~ s/Deutschen /Deutsches /;
 
     @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
   }
@@ -194,19 +206,36 @@ sub checkAbsoluteReference {
   if(not @law) {
     @law = grep { $_->{'veryshorthand'} =~ /$lawName/ } values %{Parse::all()};
   }
-  if($lawName =~ /^[a-zäöü]/) {
+  if(not @law and exists $lawNameExpansion{$lawName}) {
+    @law = grep { $_->{'veryshorthand'} eq $lawNameExpansion{$lawName} } values %{Parse::all()};
+  }
+  if($lawName =~ /^[a-zäöü-]/ or $lawName =~ /-$/) {
     return 0;
   }
-  if($lawName =~ /^(Gesetze?s?n?|Rechtsverordnunge?n?|Beiordnung|Verordnung|Landesgesetze?|Landesbesoldungsgesetze?|Buch|In Rechtsverordnungen|Soweit Rechtsverordnunge?n?)$/) {
+  if($lawName =~ /^(Gesetze?s?n?|Rechtsverordnunge?n?|Beiordnung|Verordnung|Grund Gesetz|Grund Landesgesetze?|Landesgesetze?|Landesbesoldungsgesetze?|Buche?s?|In Rechtsverordnungen|Soweit Rechtsverordnunge?n?|Steuergesetze|Gesetzliche|Bundesrates Rechtsverordnungen|Ausführungsgesetz|Landesmeldegesetze|Gesetzgebung|Verwaltungsverfahrensgesetze|Datenschutzgesetze|Abordnung|Bauordnungsrechts?|Steueränderungsgesetz)$/) {
+    return 0;
+  }
+  if($lawName =~ /(Änderungsgesetze?s?)$/) {
+    return 0;
+  }
+  if(exists $deletedLaws{$lawName}) {
     return 0;
   }
   if($lawName =~ / Ordnung$|^Ordnung$/) {
     return 0;
   }
-  if($lawName =~ /^(Arrestanordnung|Errichtungsanordnung|Strafgesetz|Dateianordnung|Einführungsgesetz|Rechtsordnung|Einordnung|Verordnungen|Sportordnung|Ordnungsgeld|Gesetzbuch|Erst- und Verlängerungsanordnunge?n?|.*ordnungswidrigkeite?n?|Übertragungsanordnung|Ordnungsgeldes|Tagesordnung|Rangordnung|Geschäftsordnunge?n?|Ordnungsgeldvorschrift|Dienstordnungsverhältnis|Zuordnung|Landesgesetzgebung|Bundesgesetz|Hausordnung|Ruhensanordnung|Börsenordnung|Übermittlungsverordnung|Ordnungsgeldverfahren|Gebührenordnung|Kostenordnung|Umschulungsordnung|Ausbildungsordnung|Prüfungsordnunge?n?|Fortbildungsordnung)$/) {
+  if($lawName eq 'Grundgesetz' and $paragraph !~ /Artikel/) {
+    return 0;
+  }
+
+  if($lawName =~ /^(Arrestanordnung|Errichtungsanordnung|Strafgesetz|Dateianordnung|Einführungsgesetz|Rechtsordnung|Einordnung|Verordnungen|Sportordnung|Ordnungsgeld|Gesetzbuch|Erst- und Verlängerungsanordnunge?n?|.*ordnungswidrigkeite?n?|Übertragungsanordnung|Ordnungsgeldes|Tagesordnung|Rangordnung|Geschäftsordnunge?n?|Ordnungsgeldvorschrift|Dienstordnungsverhältnis|Zuordnung|Landesgesetzgebung|Bundesgesetz|Hausordnung|Ruhensanordnung|Börsenordnung|Übermittlungsverordnung|Ordnungsgeldverfahren|Gebührenordnung|Kostenordnung|Umschulungsordnung|Ausbildungsordnung|Prüfungsordnunge?n?|Fortbildungsordnung|Überleitungsverordnung|Personalverordnung|Abschiedungsanordnung|Ordnungsmässigkeit|Wahlordnung|Berufsordnung|(?:Als )?Ordnungsmassnahmen?|Forderungsklassenzuordnung|Vorgesetztenverhältnisses|Zugangsanordnung|Verordnungskosten|Budgetverordnung|Vorgesetzten|Abschiebungsanordnung|Zuordnungsverfahren|Ordnungsnummer|Stellenzulagenverordnung|Ausbildungs- und Prüfungsverordnung|Zweiten Gesetze?s?|Zulassungsverordnungen|Reichsgesetzbl|Rechts- und Gesellschaftsordnung|Meisterprüfungsordnungen|Ausführungsanordnung|Aufklärungsanordnungen|Festgesetzte|Lager- und Verträglichkeitsgruppenzuordnung|Durchführungsverordnung|Folgeanordnungen|Ausbildungs- und Prüfungsordnungen|Bundesbesoldungsordnunge?n?|Raumordnung|Neuordnung|Gesellen- und Meisterprüfungsordnungen|Benutzungsanordnung|Weiterbildungsordnunge?n?|Verordnungsumfangs?|Versetzungs- und Abordnungsschutz|Aktivität Buch|Schiesssportordnunge?n?|Dienstordnung|Arzneimittelverordnungen|Verwaltungsanordnung|Reisekostenordnung)$/) {
     return 0;
   }
   if($lawName =~ /entgegengesetzt|eingesetzt|festgesetzt|Anordnung|fortgesetzt|Ordnungswidrig|ausgesetzt|vorgesetzt/) {
+    return 0;
+  }
+  if(exists $buchNumeric{$lawName}) {
+    # this is actually a local reference
     return 0;
   }
 
@@ -251,3 +280,47 @@ sub initBuchNumeric {
     'Zwölftes Buch' => 12,
   );
 }
+
+sub initDeletedLaws {
+  return (
+    'Bundessozialhilfegesetz' => 1,
+    'Kriegsgefangenenentschädigungsgesetz' => 1, # http://buerger.thueringen.de/modules/bs/serviceportal/index.php?mode=static&OP[0][c]=contentdiv&OP[0][f]=search&OP[0][p][LLG_ID]=354994&dclp=a287b38a9cda2ee2b0aec651d64d7366&fs=0
+    'Reichsapothekerordnung' => 1, # http://alex.onb.ac.at/cgi-content/alex?apm=0&aid=dra&datum=19370004&seite=00000457&zoom=2
+    'Rechtsberatungsgesetz' => 1, # http://de.wikipedia.org/wiki/Rechtsberatungsgesetz => Rechtsdienstleistungsgesetz
+    'Rechtsanwaltsgesetz' => 1, # http://www.gesetze-im-internet.de/einigvtr/BJNR208890990BJNE025800301.html
+    'Schiffsbankgesetz' => 1, # http://www.google.com/url?sa=t&rct=j&q=gesetz%20%C3%BCber%20schiffspfandbriefbanken&source=web&cd=2&ved=0CFUQFjAB&url=http%3A%2F%2Fdip.bundestag.de%2Fbtd%2F15%2F043%2F1504321.pdf&ei=dMcCUN-lGZHEswbGs9WhBg&usg=AFQjCNHaYvSOwsxWQct29Xr-ZhdfSTrqkA&cad=rja
+    'Gemeinnützigkeitsverordnung' => 1,
+    'Strafregistergesetz' => 1, # http://www.gesetze-im-internet.de/bzrg/__64a.html
+    'Bundesbaugesetz' => 1, # http://de.wikipedia.org/wiki/Baugesetzbuch
+    'Seuchengesetz' => 1, # http://www.gesundheitsamt.de/alle/gesetz/seuche/bsg/index.htm
+    'Bundes-Seuchengesetz' => 1,
+    'Schwerbehindertengesetz' => 1, # http://www.schwerbehindertengesetz.de/
+    'Hochschulleitungs-Stellenzulagenverordnung' => 1, # http://www.google.com/url?sa=t&rct=j&q=hstzulv%20au%C3%9Fer%20kraft%20getreten&source=web&cd=3&ved=0CFEQFjAC&url=http%3A%2F%2Fwww.gew-sachsen.de%2Fdownload%2F121%2F0%2FHochschulpolitik-in-Sachsen---quo-vadis.html&ei=wdQCULeFMs3bsgaKptmxBg&usg=AFQjCNGkcA5Ldh9ba8jR3RZ6rvkAf4CnZQ&cad=rja
+    'Reichsknappschaftsgesetz' => 1, # http://www.economia48.com/deu/d/reichsknappschaftsgesetz-rkg/reichsknappschaftsgesetz-rkg.htm
+    'Angestelltenversicherungsgesetz' => 1, # http://de.wikipedia.org/wiki/Angestelltenversicherungsgesetz
+    'Angestelltenversicherungs-Neuregelungsgesetz' => 1, # AnVG
+  );
+}
+
+sub initLawNameExpansion {
+  return (
+    'Binnenschifffahrtsgesetz' => 'BinSchG',
+    'Apothekerordnung' => 'BApO',
+    'Aussensteuergesetz' => 'AStG',
+    'Bundeskriminalamtgesetz' => 'BKAG',
+    'Erbschaftssteuergesetz' => 'ErbStG',
+    'Erbschaftsteuergesetz' => 'ErbStG',
+    'Ausländerzentralregistergesetz' => 'AZRG',
+    'Bundeselterngeldgesetz' => 'BEEG',
+    'Verbraucherschutzdurchsetzungsgesetz' => 'VSchDG',
+    'Kraft-Wärme-Koppelungsgesetz' => 'KWKG 2002',
+    'Verwaltungsvollstreckungsgesetz' => 'VwVG',
+    'Montan-Mitbestimmungsgesetz' => 'MontanMitbestG',
+    'EG-Rechts-Überleitungsverordnung' => 'EGRechtÜblV',
+    'Einigungsvertragsgesetz' => 'EinigVtrG',
+    'SE-Ausführungsgesetz' => 'SEAG',
+    'SCE-Ausführungsgesetz' => 'SCEAG',
+  );
+}
+
+# TODO: "im Sinne der $someLaw" als Referenz checken
