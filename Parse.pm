@@ -76,9 +76,17 @@ sub parseHTML {
         # skip
       } elsif($h3->text() =~ /^\s*Inhaltsverzeichnis\s*$/s) {
         # skip
+      } elsif($h3->text() =~ /^\s*Inhaltsverzeichnis\s*\*\)\s*$/s) {
+        # skip
+      } elsif($h3->text() =~ /^\s*Inhalt\s*$/s) {
+        # skip
+      } elsif($h3->text() =~ /^\s*Gliederung\s*$/s) {
+        # skip
       } elsif($h3->text() =~ /^\s*Übersicht\s*$/s) {
         # skip
       } elsif($h3->text() =~ /^\s*Eingangsformel/s) {
+        # skip
+      } elsif($h3->text() =~ /^\s*Präambel/s) {
         # skip
       } elsif($h3->text() =~ /^\s*Anhang/s) {
         # skip
@@ -95,7 +103,7 @@ sub parseHTML {
         parseAbsatz($block, $paragraph);
 
         print "Parsed § " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
-      } elsif($h3->text() =~ /^Art\.? (\d+\S*)\s*(.*)$/s) {
+      } elsif($h3->text() =~ /^(?:Art\.?|Artikel) (\S*)\s*(.*)$/s) {
         my $paragraph = {
           'number' => "Artikel $1",
           'title' => $2,
@@ -105,7 +113,62 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed Art. " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /^(?:Nr\.?|Nummer) (\S*)\s*(.*)$/s) {
+        my $paragraph = {
+          'number' => "Nummer $1",
+          'title' => $2,
+          'absatz' => [],
+        };
+        push @paragraphs, $paragraph;
+
+        parseAbsatz($block, $paragraph);
+
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /^(Tabelle|Formblatt|Muster|Regel) (\S*)\s*(.*)$/s) {
+        my $paragraph = {
+          'number' => "$1 $2",
+          'title' => $3,
+          'absatz' => [],
+        };
+        push @paragraphs, $paragraph;
+
+        parseAbsatz($block, $paragraph);
+
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /^([IVXLCDM]+)\.\s*(.*)$/s) {
+        my $paragraph = {
+          'number' => "Artikel $1",
+          'title' => $2,
+          'absatz' => [],
+        };
+        push @paragraphs, $paragraph;
+
+        parseAbsatz($block, $paragraph);
+
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /^([0-9A-Z][0-9A-Za-z]*)\.\s*(.*)$/s) {
+        my $paragraph = {
+          'number' => "Artikel $1",
+          'title' => $2,
+          'absatz' => [],
+        };
+        push @paragraphs, $paragraph;
+
+        parseAbsatz($block, $paragraph);
+
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+      } elsif($h3->text() =~ /^\s*(Registrierung von Verbänden und deren Vertreter|Befragung der Bundesregierung|Protokollnotiz .*|Protokoll.*|Gemeinsames Protokoll.*|Einziger Paragraph|Dienstanweisung.*)\s*$/s) {
+        my $paragraph = {
+          'number' => "$1",
+          'title' => "$1",
+          'absatz' => [],
+        };
+        push @paragraphs, $paragraph;
+
+        parseAbsatz($block, $paragraph);
+
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
       } elsif($h3->text() =~ /\(Änderungs- und Aufhebungsvorschriften\)/) {
         # skip
       } elsif($h3->text() =~ /\(weggefallen\)/) {
@@ -116,9 +179,24 @@ sub parseHTML {
         # skip
       } elsif($h3->text() =~ /\(gegenstandslos\)/) {
         # skip
-      } elsif($h3->text() =~ /\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\./) {
-        # skip
       } elsif($h3->text() =~ /Schlu(ß|ss)formel/) {
+        # skip
+      } elsif($block->text() =~ /Inhalt: [Nn]icht darstellbar/) {
+        # skip
+      } elsif($block->text() =~ /\(weggefallen\)/) {
+        # skip
+      } elsif($block->text() =~ /\(Änderung anderer Vorschriften\)/) {
+        # skip
+      } elsif($h3->text() =~ /^Abbildung de/) {
+        # skip
+      } elsif($h3->text() =~ /^Wirtschaftsplan /) {
+        # skip
+      } elsif($h3->text() =~ /^Gesamtplan /) {
+        # skip
+      } elsif($block->descendants('img')) {
+        # skip
+      } elsif($h3->text() =~ /^Vorschriften für/) {
+        # TODO
         # skip
       } else {
         $block->print();
@@ -137,6 +215,7 @@ sub parseHTML {
     'shorthand' => $shorthand,
     'veryshorthand' => $veryshorthand,
     'paragraph' => \@paragraphs,
+    'source' => $source,
   };
 
   store $law, "$source.store";

@@ -1,0 +1,33 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use encoding 'utf-8';
+
+use Parse;
+use Data::Dumper;
+
+for my $lawFile (glob 'data/laws/*.html') {
+  Parse::parseHTML($lawFile);
+}
+
+while(my $shorthand = <STDIN>) {
+  chomp $shorthand;
+
+  my @law = grep { $_->{'veryshorthand'} eq $shorthand } values %{Parse::all()};
+  if(not @law) {
+    @law = grep { $_->{'name'} =~ /$shorthand/ or $_->{'shorthand'} =~ /$shorthand/ } values %{Parse::all()};
+  }
+
+  if(@law == 1) {
+    my $source = $law[0]->{'source'};
+    system("w3m '$source'");
+  } elsif(not @law) {
+    print "Not found: $shorthand\n";
+  } else {
+    print "Multiple matches: $shorthand\n";
+    foreach my $law (@law) {
+      print $law->{'veryshorthand'} . ": " . $law->{'name'} . "\n";
+    }
+  }
+}

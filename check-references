@@ -13,15 +13,17 @@ my $good = "\e[32;1m+\e[0m\e[2K\e[1G";
 my $unknown = "\e[33;1m?\e[0m\n";
 my $bad = "\e[31;1m-\e[0m\e[2K\e[1G";
 # my $bad = "\e[31;1m-\e[0m\n";
-my $report = 0;
-
-my $someLaw = qr(Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?);
-
-# die "Telekommunikations-Überwachungsverordnung" =~ m/^$someLaw$/;
+my $report = 1;
 
 for my $lawFile (glob 'data/laws/*.html') {
   Parse::parseHTML($lawFile);
 }
+
+my $allShorthands = join '|', grep { $_ =~ /^[1-9a-zäöüßA-ZÄÖÜ. ]+$/s } map { $_->{'veryshorthand'} } values %{Parse::all()};
+my $someLaw = qr(Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?|$allShorthands);
+
+# die Dumper(['Verordnung zur Einführung der Binnenschifffahrtsstraßen-Ordnung' =~ /(?:der|des)\s*($someLaw)/]);
+# die "Telekommunikations-Überwachungsverordnung" =~ m/^$someLaw$/;
 
 my $oldExternalLaw = undef;
 my %buchNumeric = initBuchNumeric();
@@ -51,6 +53,11 @@ sub checkReferences {
 
   # print "$text\n";
 
+  my $globalExternalLaw = undef;
+  if($law->{'name'} =~ /(?:der|des|zum)\s*($someLaw)/) {
+    $globalExternalLaw = $1;
+  }
+
   my $externalLaw = undef;
 
   my $any = 1;
@@ -64,7 +71,7 @@ sub checkReferences {
       next;
     }
 
-    if($text =~ /§ (\d+[a-z]*\.?)(?: ff\.)?(.*)/s) {
+    if($text =~ /§ (\d+[a-z]*\.?\d*)(?: ff\.)?(.*)/s) {
       my $refParagraph = $1;
       $text = $2;
 
@@ -92,8 +99,19 @@ sub checkReferences {
             $any = 1;
             next;
           }
+        } elsif($text =~ /^(?:\s*Satz (\d+))?(?:.*)\s+($someLaw)/) {
+          $externalLaw = $2;
+          if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
+            $any = 1;
+            next;
+          }
         } elsif($externalLaw) {
           if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
+            $any = 1;
+            next;
+          }
+        } elsif($globalExternalLaw) {
+          if(checkAbsoluteReference($law, $paragraph, $absatz, $globalExternalLaw, $refParagraph, $a)) {
             $any = 1;
             next;
           }
@@ -117,6 +135,7 @@ sub checkReferences {
             print "VSH: " . $law->{'veryshorthand'} . "\n" if $report;
             print "Context: " . $externalLaw . "\n" if defined $externalLaw and $report;
             print "Context: " . $oldExternalLaw . "\n" if defined $oldExternalLaw and $report;
+            print "Context: " . $globalExternalLaw . "\n" if defined $globalExternalLaw and $report;
             print "\e[31;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\e[0m\n" if $report;
           }
         }
@@ -172,6 +191,7 @@ sub checkAbsoluteReference {
     $lawName =~ s/Buchs$/Buch/;
     $lawName =~ s/Buche$/Buch/;
     $lawName =~ s/zwanzigsten /zwanzigstes /;
+    $lawName =~ s/Zweiten /Zweites /;
     $lawName =~ s/läufigen /läufiges /;
     $lawName =~ s/Deutschen /Deutsches /;
 
@@ -191,6 +211,9 @@ sub checkAbsoluteReference {
       @law = grep { $_->{'veryshorthand'} eq $lawName } values %{Parse::all()};
     }
     # die "$lawName not resolved" unless @law;
+  }
+  if(not @law) {
+    @law = grep { $_->{'name'} =~ m/^$lawName\s*\*\)/ } values %{Parse::all()};
   }
   if(not @law) {
     $lawName =~ s/ss/ß/g;
@@ -299,6 +322,9 @@ sub initDeletedLaws {
     'Reichsknappschaftsgesetz' => 1, # http://www.economia48.com/deu/d/reichsknappschaftsgesetz-rkg/reichsknappschaftsgesetz-rkg.htm
     'Angestelltenversicherungsgesetz' => 1, # http://de.wikipedia.org/wiki/Angestelltenversicherungsgesetz
     'Angestelltenversicherungs-Neuregelungsgesetz' => 1, # AnVG
+    'Altsparergesetz' => 1, # http://www.buzer.de/gesetz/939/index.htm
+    'Holzabsatzfondsgesetz' => 1, # http://www.buzer.de/gesetz/184/index.htm
+    'Absatzfondsgesetz' => 1, # http://www.buzer.de/gesetz/3191/index.htm
   );
 }
 
@@ -320,7 +346,10 @@ sub initLawNameExpansion {
     'Einigungsvertragsgesetz' => 'EinigVtrG',
     'SE-Ausführungsgesetz' => 'SEAG',
     'SCE-Ausführungsgesetz' => 'SCEAG',
+    'Alkopopsteuergesetz' => 'AlkopopStG',
+    'Sprecherausschussgesetz' => 'SprAuG',
   );
 }
 
 # TODO: "im Sinne der $someLaw" als Referenz checken
+# TODO: Verordnungen etc. zum XYZ-Gesetz sauber auflösen
