@@ -73,7 +73,7 @@ foreach my $art (sort { $a <=> $b } keys %exceptions) {
   if($art) {
     print "\n<h2>Ausnahmen zu Artikel $art</h2>\n";
   } else {
-    print "\n<h2>Grundrechtseinschränkungen ohne / mit unklarer Artikelnennung</h2>\n";
+    print "\n<h2>Grundrechtseinschränkungen ohne / mit unklarer Artikelnennung (unvollständig)</h2>\n";
   }
 
   print "<ul>\n";
