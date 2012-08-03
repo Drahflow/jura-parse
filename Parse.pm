@@ -11,13 +11,13 @@ use XML::Twig;
 my %all;
 
 sub parseHTML {
-  my ($source) = @_;
+  my ($source, $silent) = @_;
 
   if(-r "$source.store") {
     my $law = retrieve("$source.store");
     $all{$law->{'name'} . '(' . $law->{'veryshorthand'} . ')'} = $law;
 
-    print "Loaded " . $law->{'name'} . ' (' . $law->{'veryshorthand'} . ")\n";
+    print "Loaded " . $law->{'name'} . ' (' . $law->{'veryshorthand'} . ")\n" unless $silent;
 
     return;
   }
@@ -102,7 +102,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed § " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed § " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /^(?:Art\.?|Artikel) (\S*)\s*(.*)$/s) {
         my $paragraph = {
           'number' => "Artikel $1",
@@ -113,7 +113,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /^(?:Nr\.?|Nummer) (\S*)\s*(.*)$/s) {
         my $paragraph = {
           'number' => "Nummer $1",
@@ -124,7 +124,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /^(Tabelle|Formblatt|Muster|Regel) (\S*)\s*(.*)$/s) {
         my $paragraph = {
           'number' => "$1 $2",
@@ -135,7 +135,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /^([IVXLCDM]+)\.\s*(.*)$/s) {
         my $paragraph = {
           'number' => "Artikel $1",
@@ -146,7 +146,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /^([0-9A-Z][0-9A-Za-z]*)\.\s*(.*)$/s) {
         my $paragraph = {
           'number' => "Artikel $1",
@@ -157,7 +157,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /^\s*(Registrierung von Verbänden und deren Vertreter|Befragung der Bundesregierung|Protokollnotiz .*|Protokoll.*|Gemeinsames Protokoll.*|Einziger Paragraph|Dienstanweisung.*)\s*$/s) {
         my $paragraph = {
           'number' => "$1",
@@ -168,7 +168,7 @@ sub parseHTML {
 
         parseAbsatz($block, $paragraph);
 
-        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n";
+        print "Parsed " . $paragraph->{'number'} . ' ' . $paragraph->{'title'} . "\n" unless $silent;
       } elsif($h3->text() =~ /\(Änderungs- und Aufhebungsvorschriften\)/) {
         # skip
       } elsif($h3->text() =~ /\(weggefallen\)/) {
@@ -208,7 +208,7 @@ sub parseHTML {
     }
   }
 
-  print "Parsed $name ($veryshorthand)\n";
+  print "Parsed $name ($veryshorthand)\n" unless $silent;
 
   my $law = {
     'name' => $name,

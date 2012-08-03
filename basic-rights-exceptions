@@ -1,0 +1,92 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use encoding 'utf-8';
+
+use Parse;
+use Data::Dumper;
+
+for my $lawFile (glob 'data/laws/*.html') {
+  Parse::parseHTML($lawFile, 1);
+}
+
+my %exceptions;
+my %exceptingLaws;
+
+foreach my $law (values %{Parse::all()}) {
+  next if $law->{'veryshorthand'} eq 'GG';
+
+  foreach my $par (@{$law->{'paragraph'}}) {
+    foreach my $abs (@{$par->{'absatz'}}) {
+      my $text = $abs->{'text'};
+      if($text =~ /Grundrecht.*eingeschränkt/) {
+        # print "\n" . $law->{'veryshorthand'} . ' ' . $par->{'number'} . ' Abs. ' . ($abs->{'number'} or '') . "\n";
+        # print $abs->{'text'} . "\n";;
+
+        if($text =~ /Artikels?\s+(\d+).*?\s+Grundgesetz/) {
+          while($text =~ /Artikels?\s+(\d+).*?\s+Grundgesetz(.*)/) {
+            push @{$exceptions{$1}}, [$law, $par, $abs];
+            $text = $2;
+
+            $exceptingLaws{$law->{'veryshorthand'}} = 1;
+          }
+        } else {
+          push @{$exceptions{0}}, [$law, $par, $abs];
+        }
+      } elsif($text =~ /Wohnung.*betreten/) {
+        if($text =~ /mit (dem |der )?(Einverständnis|Zustimmung)/) {
+          # ok
+        } elsif($text =~ /Wohnung der verletzten Person/) {
+          # ok
+        } elsif($text =~ /Ausnahme von.*Wohnung/) {
+          # ok
+        } elsif($text =~ /auf Wunsch/) {
+          # ok
+        } elsif($text =~ /Unter.*Wohnung.*sind.*zu.*verstehen/) {
+          # ok
+        } else {
+          push @{$exceptions{0}}, [$law, $par, $abs];
+        }
+      }
+    }
+  }
+}
+
+my @validErrornousExceptions;
+
+foreach my $exception (@{$exceptions{0}}) {
+  push @validErrornousExceptions, $exception
+    unless $exceptingLaws{$exception->[0]->{'veryshorthand'}};
+}
+
+$exceptions{0} = \@validErrornousExceptions;
+
+print <<EOHTML;
+<html><head>
+  <title>Grundrechtseingriffe</title>
+  <meta http-equiv="Content-type" content="text/html; charset=UTF-8" />
+</head><body>
+  <h1>Grundrechtseingriffe durch Bundesgesetze</h1>
+EOHTML
+foreach my $art (sort { $a <=> $b } keys %exceptions) {
+  if($art) {
+    print "\n<h2>Ausnahmen zu Artikel $art</h2>\n";
+  } else {
+    print "\n<h2>Grundrechtseinschränkungen ohne / mit unklarer Artikelnennung</h2>\n";
+  }
+
+  print "<ul>\n";
+  my $lastAbs;
+  foreach my $exception (sort { $a->[0]->{'veryshorthand'} cmp $b->[0]->{'veryshorthand'} } @{$exceptions{$art}}) {
+    my ($law, $par, $abs) = @$exception;
+
+    next if defined $lastAbs and $abs == $lastAbs;
+    $lastAbs = $abs;
+
+    print '<li>' . $law->{'veryshorthand'} . ' § ' . $par->{'number'} . ($abs->{'number'}? ' Abs. ' . $abs->{'number'}: '') . " - " . $law->{'name'} . "</li>\n";
+    print '<p style="font-size: 70%;">' . $abs->{'text'} . '</p>';
+  }
+  print "</ul>\n";
+}
+print "</body></html>\n";
