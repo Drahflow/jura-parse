@@ -20,7 +20,7 @@ for my $lawFile (glob 'data/laws/*.html') {
 }
 
 my $allShorthands = join '|', grep { $_ =~ /^[1-9a-zäöüßA-ZÄÖÜ. ]+$/s } map { $_->{'veryshorthand'} } values %{Parse::all()};
-my $someLaw = qr(Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?\b|$allShorthands);
+my $someLaw = qr(Grundbuchverfügung|Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?\b|$allShorthands);
 
 # die Dumper(['Verordnung zur Einführung der Binnenschifffahrtsstraßen-Ordnung' =~ /(?:der|des)\s*($someLaw)/]);
 # die "Telekommunikations-Überwachungsverordnung" =~ m/^$someLaw$/;
@@ -180,6 +180,13 @@ sub checkAbsoluteReference {
   if(not @law) {
     $lawName =~ s/^(des|der|die|das|dem|einer?m?|diese?s?m?|durch|kraft|von) //is;
 
+    @law = grep { $_->{'name'} eq $lawName } values %{Parse::all()};
+  }
+  if(not @law) {
+    @law = grep { $_->{'veryshorthand'} eq $lawName } values %{Parse::all()};
+  }
+
+  if(not @law) {
     $lawName =~ s/lichen /liches /;
     $lawName =~ s/Gesetzes/Gesetz/;
     $lawName =~ s/gesetzes/gesetz/;
@@ -330,6 +337,7 @@ sub initDeletedLaws {
     'Holzabsatzfondsgesetz' => 1, # http://www.buzer.de/gesetz/184/index.htm
     'Absatzfondsgesetz' => 1, # http://www.buzer.de/gesetz/3191/index.htm
     'Geräte- und Produktsicherheitsgesetz' => 1, # http://dejure.org/gesetze/GPSG
+    'Zweites Wohnungsbaugesetz' => 1, # http://www.bundesrecht24.de/cgi-bin/lexsoft/bundesrecht24.cgi?chosenIndex=0708&source=link&highlighting=off&xid=139813,1  Außer Kraft am 1. Januar 2002 durch Artikel 2 des Gesetzes vom 13. September 2001 (BGBl. I S. 2376)
   );
 }
 
