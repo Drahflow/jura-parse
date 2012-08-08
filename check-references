@@ -20,7 +20,7 @@ for my $lawFile (glob 'data/laws/*.html') {
 }
 
 my $allShorthands = join '|', grep { $_ =~ /^[1-9a-zäöüßA-ZÄÖÜ. ]+$/s } map { $_->{'veryshorthand'} } values %{Parse::all()};
-my $someLaw = qr(Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?|$allShorthands);
+my $someLaw = qr(Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?\b|$allShorthands);
 
 # die Dumper(['Verordnung zur Einführung der Binnenschifffahrtsstraßen-Ordnung' =~ /(?:der|des)\s*($someLaw)/]);
 # die "Telekommunikations-Überwachungsverordnung" =~ m/^$someLaw$/;
@@ -31,6 +31,8 @@ my %deletedLaws = initDeletedLaws();
 my %lawNameExpansion = initLawNameExpansion();
 
 foreach my $law (sort { $a->{'veryshorthand'} cmp $b->{'veryshorthand'} } values %{Parse::all()}) {
+  next unless $law->{'name'} =~ /Verordnung/i; # only report stuff fixable by ministers for now
+
   foreach my $paragraph (@{$law->{'paragraph'}}) {
     $oldExternalLaw = undef;
 
@@ -54,7 +56,7 @@ sub checkReferences {
   # print "$text\n";
 
   my $globalExternalLaw = undef;
-  if($law->{'name'} =~ /(?:der|des|zum)\s*($someLaw)/) {
+  if($law->{'name'} =~ /(?:der|des|dem|zum)\s*($someLaw)/) {
     $globalExternalLaw = $1;
   }
 
@@ -93,27 +95,28 @@ sub checkReferences {
       foreach my $a (defined $refAbsatz? @$refAbsatz: (undef)) {
         if($text =~ /^\s*(?:gilt auch für|findet.*Anwendung)/) {
           # this cannot be rescued by later external mentions
-        } elsif($text =~ /^(?:\s*Satz (\d+))?(?:[^.\(]{0,200}?|[^.\(]*?\([^\(]*?\)[^.\(]*?)(?:\s+der|\s+des)?\s+($someLaw)/) {
-          $externalLaw = $2;
-          if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
-            $any = 1;
-            next;
+        } else {
+          if($text =~ /^(?:\s*Satz (\d+))?(?:[^.\(]{0,200}?|[^.\(]*?\([^\(]*?\)[^.\(]*?)(?:\s+der|\s+des)?\s+($someLaw)/) {
+            $externalLaw = $2;
+            if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
+              $any = 1;
+              next;
+            }
           }
-        } elsif($text =~ /^(?:\s*Satz (\d+))?(?:.*)\s+($someLaw)/) {
-          $externalLaw = $2;
-          if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
-            $any = 1;
-            next;
+          if($text =~ /^(?:\s*Satz (\d+))?(?:.*)\s+($someLaw)/) {
+            $externalLaw = $2;
           }
-        } elsif($externalLaw) {
-          if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
-            $any = 1;
-            next;
+          if($externalLaw) {
+            if(checkAbsoluteReference($law, $paragraph, $absatz, $externalLaw, $refParagraph, $a)) {
+              $any = 1;
+              next;
+            }
           }
-        } elsif($globalExternalLaw) {
-          if(checkAbsoluteReference($law, $paragraph, $absatz, $globalExternalLaw, $refParagraph, $a)) {
-            $any = 1;
-            next;
+          if($globalExternalLaw) {
+            if(checkAbsoluteReference($law, $paragraph, $absatz, $globalExternalLaw, $refParagraph, $a)) {
+              $any = 1;
+              next;
+            }
           }
         }
 
@@ -191,7 +194,8 @@ sub checkAbsoluteReference {
     $lawName =~ s/Buchs$/Buch/;
     $lawName =~ s/Buche$/Buch/;
     $lawName =~ s/zwanzigsten /zwanzigstes /;
-    $lawName =~ s/Zweiten /Zweites /;
+    $lawName =~ s/Zweiten /Zweite / if $lawName =~ /verordnung/i;
+    $lawName =~ s/Zweiten /Zweites / if $lawName =~ /gesetz/i;
     $lawName =~ s/läufigen /läufiges /;
     $lawName =~ s/Deutschen /Deutsches /;
 
@@ -325,6 +329,7 @@ sub initDeletedLaws {
     'Altsparergesetz' => 1, # http://www.buzer.de/gesetz/939/index.htm
     'Holzabsatzfondsgesetz' => 1, # http://www.buzer.de/gesetz/184/index.htm
     'Absatzfondsgesetz' => 1, # http://www.buzer.de/gesetz/3191/index.htm
+    'Geräte- und Produktsicherheitsgesetz' => 1, # http://dejure.org/gesetze/GPSG
   );
 }
 
@@ -348,6 +353,7 @@ sub initLawNameExpansion {
     'SCE-Ausführungsgesetz' => 'SCEAG',
     'Alkopopsteuergesetz' => 'AlkopopStG',
     'Sprecherausschussgesetz' => 'SprAuG',
+    'Binnenschifffahrtsaufgabengesetz' => 'BinSchAufgG',
   );
 }
 
