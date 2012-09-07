@@ -1,0 +1,82 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use encoding 'utf-8';
+
+use Parse;
+use Data::Dumper;
+
+for my $lawFile (glob 'data/laws/*.html') {
+  Parse::parseHTML($lawFile, 1);
+}
+
+my %occurrence;
+
+foreach my $law (values %{Parse::all()}) {
+  next if $law->{'veryshorthand'} =~ /RAG$/;
+  next if $law->{'veryshorthand'} =~ /RAV$/;
+  next if $law->{'veryshorthand'} eq '3. DV-BEG';
+  next if $law->{'veryshorthand'} eq 'AKG';
+  next if $law->{'veryshorthand'} eq 'BEG';
+  next if $law->{'veryshorthand'} eq 'BRüG';
+  next if $law->{'veryshorthand'} eq 'BRüG-Saar';
+  next if $law->{'veryshorthand'} eq 'BVG';
+  next if $law->{'veryshorthand'} eq 'BVGSaarEG';
+  next if $law->{'veryshorthand'} eq 'BWKAusl';
+  next if $law->{'veryshorthand'} eq 'BerRehaG';
+  next if $law->{'veryshorthand'} eq 'EVZStiftG';
+  next if $law->{'veryshorthand'} eq 'EbertStiftG';
+  next if $law->{'veryshorthand'} eq 'EntschG';
+  next if $law->{'veryshorthand'} eq 'FRG';
+  next if $law->{'veryshorthand'} eq 'GräbG';
+  next if $law->{'veryshorthand'} eq 'HAG';
+  next if $law->{'veryshorthand'} eq 'IAOÜbk118G';
+  next if $law->{'veryshorthand'} eq 'IHKG';
+  next if $law->{'veryshorthand'} eq 'NSVerbG';
+  next if $law->{'veryshorthand'} eq 'PTNeuOG';
+  next if $law->{'veryshorthand'} eq 'PersStdGÄndG';
+  next if $law->{'veryshorthand'} eq 'RHeimstGAufhG';
+  next if $law->{'veryshorthand'} eq 'VersAnsprReglG';
+  next if $law->{'veryshorthand'} eq 'WGSVG';
+  next if $law->{'veryshorthand'} eq 'ZRBG';
+
+  foreach my $par (@{$law->{'paragraph'}}) {
+    foreach my $abs (@{$par->{'absatz'}}) {
+      my $text = $abs->{'text'};
+      if($text =~ /Reichs/) {
+        push @{$occurrence{0}}, [$law, $par, $abs];
+      }
+    }
+  }
+}
+
+print <<EOHTML;
+<html><head>
+  <title>Das "Reich" im Gesetz der Bundesrepublik</title>
+  <meta http-equiv="Content-type" content="text/html; charset=UTF-8" />
+</head><body>
+  <h1>Das "Reich" im Gesetz der Bundesrepublik</h1>
+  <p>
+  Auftauchen der Regex /Reichs.*/ im Gesetzeskorpus. Ausgenommen einige der Rentengesetze und der
+  Gesetze über Wiedergutmachung, Entschädigung sowie einige Stellen, wo Reichsgesetze außer Kraft
+  gesetzt werden.
+  </p>
+EOHTML
+foreach my $art (sort { $a <=> $b } keys %occurrence) {
+  print "<ul>\n";
+  my $lastAbs;
+  foreach my $occurrence (sort { $a->[0]->{'veryshorthand'} cmp $b->[0]->{'veryshorthand'} } @{$occurrence{$art}}) {
+    my ($law, $par, $abs) = @$occurrence;
+
+    next if defined $lastAbs and $abs == $lastAbs;
+    $lastAbs = $abs;
+
+    print '<li>' . $law->{'veryshorthand'} . ' § ' . $par->{'number'} . ($abs->{'number'}? ' Abs. ' . $abs->{'number'}: '') . " - " . $law->{'name'} . "</li>\n";
+    my $text = $abs->{'text'};
+    $text =~ s/Reichs/<span style="background: #ff00ff;">Reichs<\/span>/g;
+    print '<p style="font-size: 70%;">' . $text . '</p>';
+  }
+  print "</ul>\n";
+}
+print "</body></html>\n";
