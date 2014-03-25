@@ -15,12 +15,19 @@ my $bad = "\e[31;1m-\e[0m\e[2K\e[1G";
 # my $bad = "\e[31;1m-\e[0m\n";
 my $report = 1;
 
+for my $lawFile (glob 'data/sh/laws/*.html') {
+  Parse::parseHTMLSH($lawFile);
+}
+
+my @toCheck = values %{Parse::all()};
+# @toCheck = grep { $_->{'veryshorthand'} =~ /AmrumWasSchGebV/ } @toCheck;
+
 for my $lawFile (glob 'data/laws/*.html') {
   Parse::parseHTML($lawFile);
 }
 
-my $allShorthands = join '|', grep { $_ =~ /^[1-9a-zäöüßA-ZÄÖÜ. ]+$/s } map { $_->{'veryshorthand'} } values %{Parse::all()};
-my $someLaw = qr(Grundbuchverfügung|Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?\b|$allShorthands);
+my $allShorthands = join '|', sort { length($b) <=> length($a) } grep { $_ =~ /^[1-9a-zäöüßA-ZÄÖÜ. ]+$/s } map { $_->{'veryshorthand'} } values %{Parse::all()};
+my $someLaw = qr(Grundbuchverfügung|Binnenschifffahrtsstraßen-Ordnung|Lebensmittel-, Bedarfsgegenstände- und Futtermittelgesetzbuchs?|Kraft-Wärme-Koppe?lungsgesetz|Gesetz über die Kontrolle von Kriegswaffen|Justizvergütungs- und -entschädigungsgesetzes|Forstschäden-Ausgleichsgesetz|(?:[A-Za-zäöüÄÖÜ-]+ Buches |[A-Za-zäöüÄÖÜ-]+\s+|[A-Za-zäöüÄÖÜ-]+- und -?)?(?:[A-ZÄÖÜß0-9][A-Za-zäöüÄÖÜß0-9-]+(?:ordnung|gesetz)|Ordnung\b|Gesetz)[A-Za-zäöüÄÖÜß0-9-]*|[A-Za-zäöüÄÖÜ-]+ Buche?s?\b|$allShorthands);
 
 # die Dumper(['Verordnung zur Einführung der Binnenschifffahrtsstraßen-Ordnung' =~ /(?:der|des)\s*($someLaw)/]);
 # die "Telekommunikations-Überwachungsverordnung" =~ m/^$someLaw$/;
@@ -30,9 +37,7 @@ my %buchNumeric = initBuchNumeric();
 my %deletedLaws = initDeletedLaws();
 my %lawNameExpansion = initLawNameExpansion();
 
-foreach my $law (sort { $a->{'veryshorthand'} cmp $b->{'veryshorthand'} } values %{Parse::all()}) {
-  next unless $law->{'name'} =~ /Verordnung/i; # only report stuff fixable by ministers for now
-
+foreach my $law (sort { $a->{'veryshorthand'} cmp $b->{'veryshorthand'} } @toCheck) {
   foreach my $paragraph (@{$law->{'paragraph'}}) {
     $oldExternalLaw = undef;
 
@@ -136,9 +141,9 @@ sub checkReferences {
           } else {
             print "Name: " . $law->{'name'} . "\n" if $report;
             print "VSH: " . $law->{'veryshorthand'} . "\n" if $report;
-            print "Context: " . $externalLaw . "\n" if defined $externalLaw and $report;
-            print "Context: " . $oldExternalLaw . "\n" if defined $oldExternalLaw and $report;
-            print "Context: " . $globalExternalLaw . "\n" if defined $globalExternalLaw and $report;
+            print "Context (E): " . $externalLaw . "\n" if defined $externalLaw and $report;
+            print "Context (OE): " . $oldExternalLaw . "\n" if defined $oldExternalLaw and $report;
+            print "Context (GE): " . $globalExternalLaw . "\n" if defined $globalExternalLaw and $report;
             print "\e[31;1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\e[0m\n" if $report;
           }
         }

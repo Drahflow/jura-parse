@@ -6,6 +6,11 @@ use warnings;
 use Data::Dumper;
 use XML::Twig;
 
+-d "data" or mkdir "data";
+-d "data/laws" or mkdir "data/laws";
+-d "data/list" or mkdir "data/list";
+-d "data/index" or mkdir "data/index";
+
 foreach my $letter ('A' .. 'Z', '0' .. '9') {
   my $list = "data/list/$letter.html";
 

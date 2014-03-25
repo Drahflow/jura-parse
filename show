@@ -7,6 +7,10 @@ use encoding 'utf-8';
 use Parse;
 use Data::Dumper;
 
+for my $lawFile (glob 'data/sh/laws/*.html') {
+  Parse::parseHTMLSH($lawFile);
+}
+
 for my $lawFile (glob 'data/laws/*.html') {
   Parse::parseHTML($lawFile);
 }

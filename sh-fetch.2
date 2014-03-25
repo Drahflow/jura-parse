@@ -1,0 +1,61 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use LWP::UserAgent;
+use XML::Twig;
+use Digest::SHA qw(sha256_hex);
+
+-d "data" or mkdir "data";
+-d "data/sh" or mkdir "data/sh";
+-d "data/sh/laws" or mkdir "data/sh/laws";
+
+my $browser = LWP::UserAgent->new();
+$browser->cookie_jar( {} );
+
+my $searchUrl = 'http://www.gesetze-rechtsprechung.sh.juris.de/jportal/portal/t/228a/page/bsshoprod.psml/js_peid/Suchportlet1/media-type/html?formhaschangedvalue=yes&eventSubmit_doSearch=suchen&action=portlets.jw.MainAction&deletemask=no&wt_form=1&form=bsstdFastSearch&desc=all&query=SEARCHTERM&standardsuche=suchen';
+my $baseUrl = 'http://www.gesetze-rechtsprechung.sh.juris.de/jportal/portal/t/228a/';
+
+my $laws = { };
+
+foreach my $index (glob 'data/sh/index/*.html') {
+  print "Parsing $index...\n";
+
+  my $shortName;
+
+  open INDEX, '<:utf8', $index or die "cannot $index: $!";
+  while(my $line = <INDEX>) {
+    if($line =~ m! *([^<]+)</strong><br />!) {
+      $shortName = $1;
+    }
+    if($line =~ m!<span class="unterstrichen"><a id="[^"]+" class="TrefferlisteHervorheben" title="[^"]+Aktuelle Gesamtausgabe" href="([^"]+)">!) {
+      print "$shortName...\n";
+      $laws->{$shortName} = $1;
+    }
+  }
+  close INDEX;
+}
+
+foreach my $law (keys %$laws) {
+  my $filename = 'data/sh/laws/' . sha256_hex($law) . '.html';
+  next if -e $filename;
+
+  my $url = $laws->{$law};
+  my $lawUrl = $baseUrl . $url;
+  $lawUrl =~ s/;jsessionid=[^?]+//;
+  $lawUrl =~ s/\&amp;/\&/g;
+  my $lawResponse = $browser->get($lawUrl);
+
+  unless($lawResponse->is_success) {
+    die "Could not fetch law " . $lawResponse->status_line();
+  }
+
+  print $law . ": " . $lawResponse->status_line() . "\n";
+
+  my $html = $lawResponse->decoded_content();
+  open LAW, '>:utf8', $filename or die "cannot open $filename: $!";
+  print LAW $html;
+  close LAW;
+}

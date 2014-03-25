@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use LWP::UserAgent;
+use XML::Twig;
+
+-d "data" or mkdir "data";
+-d "data/sh" or mkdir "data/sh";
+-d "data/sh/index" or mkdir "data/sh/index";
+
+my $browser = LWP::UserAgent->new();
+$browser->cookie_jar( {} );
+
+my %searchUrls = (
+  '1' => 'http://www.gesetze-rechtsprechung.sh.juris.de/jportal/portal/t/228a/page/bsshoprod.psml/js_peid/Suchportlet1/media-type/html?formhaschangedvalue=yes&eventSubmit_doSearch=suchen&action=portlets.jw.MainAction&deletemask=no&wt_form=1&form=bsstdFastSearch&desc=all&query=Eingangsformel&standardsuche=suchen',
+  '2' => 'http://www.gesetze-rechtsprechung.sh.juris.de/jportal/portal/t/228a/page/bsshoprod.psml/js_peid/Suchportlet1/media-type/html?formhaschangedvalue=yes&eventSubmit_doSearch=suchen&action=portlets.jw.MainAction&deletemask=no&wt_form=1&form=bsstdFastSearch&desc=all&query=Inhaltsverzeichnis&standardsuche=suchen',
+);
+
+foreach my $prefix (keys %searchUrls) {
+  grabSearch($prefix, $searchUrls{$prefix});
+}
+
+sub grabSearch {
+  my ($prefix, $url) = @_;
+
+  my $currentPosition = 1;
+  my $contentBase = undef;
+
+  while($url) {
+    print "Fetching $url...\n";
+
+    my $response = $browser->get($url);
+    # die Dumper($response);
+    # die Dumper($browser->cookie_jar());
+    $contentBase = $response->{'_headers'}->{'content-base'};
+    # die $contentBase;
+
+    unless($response->is_success) {
+      die "Could not fetch index data: " . $response->status_line();
+    }
+
+    print $response->status_line() . "\n";
+
+    my $html = $response->decoded_content();
+    my $filename = 'data/sh/index/' . $prefix . '.' . $currentPosition . '.html';
+    open INDEX, '>:utf8', $filename or die "cannot open $filename: $!";
+    print INDEX $html;
+    close INDEX;
+
+    if($html =~ m!jportal/cms/technik/media/img/prodjur/icon/icon_pfeilRechts.gif!) {
+      $url = $contentBase . 'page/bsshoprod.psml/js_peid/Trefferliste/media-type/html?action=portlets.jw.ResultListFormAction&tl=true&eventSubmit_doSkipforward.x=8&eventSubmit_doSkipforward.y=9&currentNavigationPosition=' . $currentPosition . '&numberofresults=605&sortmethod=standard';
+      $currentPosition += 25;
+   } else {
+      $url = undef;
+    }
+  }
+}
