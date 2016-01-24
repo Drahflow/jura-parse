@@ -207,12 +207,14 @@ sub parseHTML {
   $content = $content->first_child('div');
   
   my @blocks = $content->children();
+  my $h1;
+  my $h2;
 
   foreach my $block (@blocks) {
     # $block->print();
 
     if($block->descendants('h1')) {
-      my $h1 = $block->first_descendant('h1');
+      $h1 = $block->first_descendant('h1');
       # $h1->print();
 
       if($name) {
@@ -229,7 +231,7 @@ sub parseHTML {
 
       $veryshorthand = $h1->next_sibling()->next_sibling()->text();
     } elsif($block->descendants('h2')) {
-      my $h2 = $block->first_descendant('h2');
+      $h2 = $block->first_descendant('h2');
 
       # skip
     } elsif($block->descendants('h3')) {
@@ -365,6 +367,9 @@ sub parseHTML {
       } elsif($h3->text() =~ /^Vorschriften für/) {
         # TODO
         # skip
+      } elsif($h3->text() =~ /^§§ \d+ bis \d+/
+          and $h2->text() =~ /weggefallen/) {
+        # skip
       } else {
         $block->print();
         print "\n" . $h3->text() . "\n";
@@ -394,6 +399,16 @@ sub parseHTML {
 
 sub all {
   return \%all;
+}
+
+sub WTF {
+  my ($block, $paragraph) = @_;
+
+  my @absatz = $block->descendants('div[@class="jurAbsatz"]');
+  foreach my $absatz (@absatz) {
+    my $text = $absatz->inner_xml();
+    print "$text\n";
+  }
 }
 
 sub parseAbsatz {
