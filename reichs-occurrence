@@ -7,6 +7,8 @@ use encoding 'utf-8';
 use Parse;
 use Data::Dumper;
 
+my $searchFor = qr(Reichs);
+
 for my $lawFile (glob 'data/laws/*.html') {
   Parse::parseHTML($lawFile, 1);
 }
@@ -44,7 +46,7 @@ foreach my $law (values %{Parse::all()}) {
   foreach my $par (@{$law->{'paragraph'}}) {
     foreach my $abs (@{$par->{'absatz'}}) {
       my $text = $abs->{'text'};
-      if($text =~ /Reichs/) {
+      if($text =~ /$searchFor/) {
         push @{$occurrence{0}}, [$law, $par, $abs];
       }
     }
@@ -74,7 +76,7 @@ foreach my $art (sort { $a <=> $b } keys %occurrence) {
 
     print '<li>' . $law->{'veryshorthand'} . ' § ' . $par->{'number'} . ($abs->{'number'}? ' Abs. ' . $abs->{'number'}: '') . " - " . $law->{'name'} . "</li>\n";
     my $text = $abs->{'text'};
-    $text =~ s/Reichs/<span style="background: #ff00ff;">Reichs<\/span>/g;
+    $text =~ s/($searchFor)/<span style="background: #ff00ff;">$1<\/span>/g;
     print '<p style="font-size: 70%;">' . $text . '</p>';
   }
   print "</ul>\n";
