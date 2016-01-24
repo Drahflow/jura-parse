@@ -255,7 +255,7 @@ sub parseHTML {
         # skip
       } elsif($h3->text() =~ /^\s*Anhang/s) {
         # skip
-      } elsif($h3->text() =~ /^\s*Anlage/s) {
+      } elsif($h3->text() =~ /^\s*\(?Anlage/s) {
         # skip
       } elsif($h3->text() =~ /^§ (\d+\S*)\s*(.*)$/s) {
         my $paragraph = {
